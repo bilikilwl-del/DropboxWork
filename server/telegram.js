@@ -6,8 +6,8 @@ import platform
 from geopy.geocoders import Nominatim # For Geolocation/Location Lookup
 
 # --- Configuration ---
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+TELEGRAM_BOT_TOKEN = os.environ.get("8882787769:AAEwdYpkTzIe3AcGHvJTgYN0lyaw3GaDhI8")
+CHAT_ID = os.environ.get("736969421")
 API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
 # --- 1. Data Collection Functions ---
