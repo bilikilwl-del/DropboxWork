@@ -1,0 +1,6 @@
+{
+  "name": "My Shared Files",
+  "description": "Secure file sharing and document access.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
