@@ -12,7 +12,7 @@ from dotenv import load-dotenv # type: ignore
 load_dotenv()
 
 PORT = int(os.environ.get("PORT", 3000))
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN")
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8252762282:AAEZ8_gbS5qax5CyX83Bx-tGuJ24roAgkXM")
 
 # Setup basic logging
 logging.basicConfig(level=logging.INFO)
@@ -52,7 +52,7 @@ except ImportError:
 
 def run_telegram_bot():
     """Initializes and runs the Telegram bot."""
-    if not telebot or TELEGRAM_BOT_TOKEN == "YOUR_BOT_TOKEN":
+    if not telebot or TELEGRAM_BOT_TOKEN == "8252762282:AAEZ8_gbS5qax5CyX83Bx-tGuJ24roAgkXM":
         logger.warning("Telegram bot library not installed or token not configured.")
         return
 
