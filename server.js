@@ -6,121 +6,319 @@ import logging
 import socket
 import platform
 import requests
-from dotenv import load-dotenv # type: ignore
+import telebot
 
-# Load environment variables if a .env file is present
+from dotenv import load_dotenv
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+# ==========================================
+# Load environment variables
+# ==========================================
 load_dotenv()
 
-PORT = int(os.environ.get("PORT", 3000))
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8252762282:AAEZ8_gbS5qax5CyX83Bx-tGuJ24roAgkXM")
+PORT = int(os.environ.get("PORT", 10000))
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 
-# Setup basic logging
-logging.basicConfig(level=logging.INFO)
+# ==========================================
+# Logging
+# ==========================================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
 logger = logging.getLogger(__name__)
 
+
 # ==========================================
-# 1. Simple HTTP Server (Python Equivalent)
+# Check Telegram token
 # ==========================================
-class SimpleHandler(http.server.SimpleHTTPRequestHandler):
+if not TELEGRAM_BOT_TOKEN:
+    logger.error("TELEGRAM_BOT_TOKEN is not configured.")
+    raise RuntimeError(
+        "Please add TELEGRAM_BOT_TOKEN to Render Environment Variables."
+    )
+
+
+# ==========================================
+# HTTP Health Server
+# Required by Render
+# ==========================================
+class HealthHandler(http.server.BaseHTTPRequestHandler):
+
     def do_GET(self):
-        if self.path == '/health':
+        if self.path == "/health" or self.path == "/":
+            response = b'{"status":"ok","service":"telegram-bot","uptime":"running"}'
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
             self.end_headers()
-            response = '{"status": "ok", "uptime": "running"}'
-            self.wfile.write(response.encode("utf-8"))
+            self.wfile.write(response)
+
         else:
-            # Fallback for static files / SPA routing
-            super().do_GET()
+            response = b'{"status":"not_found"}'
 
-def run_http_server():
-    """Runs the HTTP server in a background thread."""
-    handler = SimpleHandler
-    with socketserver.TCPServer(("0.0.0.0", PORT), handler) as httpd:
-        logger.info(f"🚀 Production server running on port {PORT}")
-        httpd.serve_forever()
+            self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
 
-
-# ==========================================
-# 2. Telegram Bot Implementation
-# ==========================================
-try:
-    import telebot
-    from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-except ImportError:
-    telebot = None
-
-def run_telegram_bot():
-    """Initializes and runs the Telegram bot."""
-    if not telebot or TELEGRAM_BOT_TOKEN == "8252762282:AAEZ8_gbS5qax5CyX83Bx-tGuJ24roAgkXM":
-        logger.warning("Telegram bot library not installed or token not configured.")
+    def log_message(self, format, *args):
+        # Prevent unnecessary HTTP access logs
         return
 
-    bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
-    @bot.message_handler(commands=['start', 'help'])
-    def send_welcome(message):
-        keyboard = InlineKeyboardMarkup()
-        keyboard.add(InlineKeyboardButton(text='Login', callback_data='login'))
-        keyboard.add(InlineKeyboardButton(text='IP Info', callback_data='ip_info'))
-        keyboard.add(InlineKeyboardButton(text='Locate Me', callback_data='locate_me'))
-        keyboard.add(InlineKeyboardButton(text='Device Info', callback_data='device_info'))
-        
-        bot.send_message(message.chat.id, 'Welcome! Choose an option:', reply_markup=keyboard)
+def run_http_server():
+    try:
+        with socketserver.TCPServer(
+            ("0.0.0.0", PORT),
+            HealthHandler
+        ) as server:
 
-    @bot.callback_query_handler(func=lambda call: True)
-    def callback_inline(query):
-        if query.data == 'login':
-            msg = bot.send_message(query.message.chat.id, 'Please enter your email and password:')
-            bot.register_next_step_handler(msg, handle_login)
+            logger.info(
+                f"HTTP health server running on port {PORT}"
+            )
 
-        elif query.data == 'ip_info':
-            ip_address = socket.gethostbyname(socket.gethostname())
-            bot.send_message(query.message.chat.id, f'Your IP address is: {ip_address}')
+            server.serve_forever()
 
-        elif query.data == 'locate_me':
+    except Exception as e:
+        logger.error(f"HTTP server error: {e}")
+
+
+# ==========================================
+# Telegram Bot
+# ==========================================
+bot = telebot.TeleBot(
+    TELEGRAM_BOT_TOKEN,
+    parse_mode=None
+)
+
+
+# ==========================================
+# /start and /help
+# ==========================================
+@bot.message_handler(commands=["start", "help"])
+def send_welcome(message):
+
+    keyboard = InlineKeyboardMarkup()
+
+    keyboard.add(
+        InlineKeyboardButton(
+            text="🌐 IP Information",
+            callback_data="ip_info"
+        )
+    )
+
+    keyboard.add(
+        InlineKeyboardButton(
+            text="📍 Server Location",
+            callback_data="location"
+        )
+    )
+
+    keyboard.add(
+        InlineKeyboardButton(
+            text="💻 Server Device Info",
+            callback_data="device_info"
+        )
+    )
+
+    keyboard.add(
+        InlineKeyboardButton(
+            text="ℹ️ Bot Information",
+            callback_data="bot_info"
+        )
+    )
+
+    bot.send_message(
+        message.chat.id,
+        "Welcome! 👋\n\n"
+        "Choose an option below:",
+        reply_markup=keyboard
+    )
+
+
+# ==========================================
+# Callback buttons
+# ==========================================
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call):
+
+    try:
+        # Acknowledge button click
+        bot.answer_callback_query(call.id)
+
+        # --------------------------------------
+        # IP Information
+        # --------------------------------------
+        if call.data == "ip_info":
+
             try:
                 hostname = socket.gethostname()
-                rsp = requests.get(f'https://ipapi.co/{socket.gethostbyname(hostname)}/json/')
-                location_data = rsp.json()
+                server_ip = socket.gethostbyname(hostname)
+
                 bot.send_message(
-                    query.message.chat.id, 
-                    f"Latitude: {location_data.get('latitude')}\n"
-                    f"Longitude: {location_data.get('longitude')}\n"
-                    f"Country: {location_data.get('country_name')}\n"
-                    f"Region: {location_data.get('region')}"
+                    call.message.chat.id,
+                    "🌐 Server IP Information\n\n"
+                    f"Hostname: {hostname}\n"
+                    f"Server IP: {server_ip}"
                 )
+
             except Exception as e:
-                bot.send_message(query.message.chat.id, f"Could not retrieve location: {e}")
 
-        elif query.data == 'device_info':
+                logger.error(f"IP information error: {e}")
+
+                bot.send_message(
+                    call.message.chat.id,
+                    "Unable to retrieve server IP information."
+                )
+
+        # --------------------------------------
+        # Server Location
+        # --------------------------------------
+        elif call.data == "location":
+
+            try:
+                response = requests.get(
+                    "https://ipapi.co/json/",
+                    timeout=10
+                )
+
+                response.raise_for_status()
+
+                data = response.json()
+
+                message_text = (
+                    "📍 Server Location\n\n"
+                    f"IP: {data.get('ip', 'Unknown')}\n"
+                    f"City: {data.get('city', 'Unknown')}\n"
+                    f"Region: {data.get('region', 'Unknown')}\n"
+                    f"Country: {data.get('country_name', 'Unknown')}\n"
+                    f"Latitude: {data.get('latitude', 'Unknown')}\n"
+                    f"Longitude: {data.get('longitude', 'Unknown')}\n"
+                    f"Timezone: {data.get('timezone', 'Unknown')}"
+                )
+
+                bot.send_message(
+                    call.message.chat.id,
+                    message_text
+                )
+
+            except Exception as e:
+
+                logger.error(f"Location error: {e}")
+
+                bot.send_message(
+                    call.message.chat.id,
+                    "Unable to retrieve the server location."
+                )
+
+        # --------------------------------------
+        # Device Information
+        # --------------------------------------
+        elif call.data == "device_info":
+
             device_info = (
-                f"Platform: {platform.system()}\n"
-                f"Release: {platform.release()}\n"
-                f"Version: {platform.version()}"
+                "💻 Server Device Information\n\n"
+                f"Operating System: {platform.system()}\n"
+                f"OS Release: {platform.release()}\n"
+                f"OS Version: {platform.version()}\n"
+                f"Machine: {platform.machine()}\n"
+                f"Processor: {platform.processor() or 'Unknown'}\n"
+                f"Hostname: {socket.gethostname()}"
             )
-            bot.send_message(query.message.chat.id, device_info)
 
-    def handle_login(msg):
-        try:
-            parts = msg.text.split(maxsplit=1)
-            email = parts[0]
-            password = parts[1] if len(parts) > 1 else "N/A"
-            bot.send_message(msg.chat.id, f'Email: {email}\nPassword: {password}')
-        except Exception:
-            bot.send_message(msg.chat.id, "Invalid format. Please send both email and password separated by a space.")
+            bot.send_message(
+                call.message.chat.id,
+                device_info
+            )
 
-    logger.info("🤖 Telegram bot polling started...")
-    bot.infinity_polling()
+        # --------------------------------------
+        # Bot Information
+        # --------------------------------------
+        elif call.data == "bot_info":
+
+            bot.send_message(
+                call.message.chat.id,
+                "🤖 Telegram Bot\n\n"
+                "Status: Online ✅\n"
+                "Hosting: Render\n"
+                "Connection: Telegram Bot API\n\n"
+                "The bot is running successfully."
+            )
+
+    except Exception as e:
+
+        logger.error(
+            f"Callback handler error: {e}"
+        )
 
 
 # ==========================================
-# Main Execution
+# Simple text handler
 # ==========================================
-if __name__ == '__main__':
-    # Start the HTTP server in a separate thread so it doesn't block the bot
-    server_thread = threading.Thread(target=run_http_server, daemon=True)
+@bot.message_handler(
+    func=lambda message: True,
+    content_types=["text"]
+)
+def handle_text(message):
+
+    if message.text.startswith("/"):
+        return
+
+    bot.send_message(
+        message.chat.id,
+        "I received your message. 👍\n\n"
+        "Use /start to open the bot menu."
+    )
+
+
+# ==========================================
+# Telegram polling
+# ==========================================
+def run_telegram_bot():
+
+    logger.info("Starting Telegram bot...")
+
+    try:
+
+        bot.remove_webhook()
+
+        logger.info(
+            "Telegram webhook removed. Starting polling..."
+        )
+
+        bot.infinity_polling(
+            timeout=60,
+            long_polling_timeout=60,
+            skip_pending=True
+        )
+
+    except Exception as e:
+
+        logger.error(
+            f"Telegram bot stopped: {e}"
+        )
+
+        raise
+
+
+# ==========================================
+# Main
+# ==========================================
+if __name__ == "__main__":
+
+    logger.info("Starting application...")
+
+    # Start Render HTTP server
+    server_thread = threading.Thread(
+        target=run_http_server,
+        daemon=True
+    )
+
     server_thread.start()
 
-    # Run the Telegram bot on the main thread
+    # Start Telegram bot
     run_telegram_bot()
