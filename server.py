@@ -44,10 +44,10 @@ if not TELEGRAM_BOT_TOKEN:
 # HTTP Health Server
 # Required by Render
 # ==========================================
-class HealthHandler(http.server.BaseHTTPRequestHandler):
+class HealthHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
-        if self.path == "/health" or self.path == "/":
+        if self.path == "/health":
             response = b'{"status":"ok","service":"telegram-bot","uptime":"running"}'
 
             self.send_response(200)
@@ -57,13 +57,8 @@ class HealthHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(response)
 
         else:
-            response = b'{"status":"not_found"}'
-
-            self.send_response(404)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(response)))
-            self.end_headers()
-            self.wfile.write(response)
+            # Serve files (including index.html) for all other paths
+            super().do_GET()
 
     def log_message(self, format, *args):
         # Prevent unnecessary HTTP access logs
